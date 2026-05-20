@@ -27,6 +27,27 @@ export const SeriesNew = z.object({
   concept: z.string().min(1),
   genre: z.string().default('drama'),
   setting: z.string().default(''),
+  // ── Upfront questionnaire (W3 / production-audit follow-up) ──
+  // Ask the operator BEFORE calling series.new. The two answers persist on
+  // the series and steer model selection + audio routing for the whole
+  // series, eliminating the double-narration / lip-sync-mismatch / wrong-
+  // family classes of bugs we hit producing the PNW field-guide.
+  // The pipeline skill enforces the ask-first contract.
+  audioStrategy: z.enum(['native', 'lip-sync', 'narrator-vo']).optional().describe(
+    'How dialogue reaches the final mix. Ask BEFORE calling series.new. ' +
+    '"native" — the video model speaks dialogue in-frame (default; best when characters speak only once or twice; assemble-episode keeps dialogueReplace=false). ' +
+    '"lip-sync" — Venice TTS renders each line, Wan 2.7 i2v lip-syncs the mouth (best when a character speaks many times so a single voice persists; assemble-episode defaults dialogueReplace=true). ' +
+    '"narrator-vo" — the speaker is a NARRATOR / voice-over only, no on-camera mouth movement (auto-sets audioMix.suppressModelNarration=true; assemble-episode defaults dialogueReplace=true and nativeVolume=0 so a competing AI narrator can\'t fight the TTS).',
+  ),
+  videoFamilyPreference: z.enum(['auto', 'seedance', 'happyhorse', 'grok-imagine', 'kling-o3']).optional().describe(
+    'Preferred video model family for action/atmosphere/character shots. Ask BEFORE calling series.new. ' +
+    'Swaps actionModel/atmosphereModel/characterConsistencyModel; lipSyncModel stays on Wan 2.7 regardless. ' +
+    '"auto" (default) — Seedance 2.0 across the board. ' +
+    '"seedance" — explicit Seedance 2.0 (same as auto, but persisted). ' +
+    '"happyhorse" — HappyHorse 1.0 for livelier hand-camera realism / cinematic grain. ' +
+    '"grok-imagine" — Grok Imagine i2v (no R2V variant; character consistency falls back to Kling O3 R2V — pick when atmosphere matters more than precise identity locks). ' +
+    '"kling-o3" — Kling O3 Standard for stylized / illustrated aesthetics.',
+  ),
 }).strict();
 
 export const SeriesList = z.object({

@@ -13,6 +13,10 @@ test('SeriesInput applies defaults for new action', () => {
   assert.equal(parsed.action, 'new');
   assert.equal(parsed.genre, 'drama');
   assert.equal(parsed.setting, '');
+  if (parsed.action === 'new') {
+    assert.equal(parsed.audioStrategy, undefined, 'audioStrategy unset by default; harness uses native');
+    assert.equal(parsed.videoFamilyPreference, undefined, 'videoFamilyPreference unset by default; harness uses auto');
+  }
 });
 
 test('EpisodeInput coerces number-like fields for storyboard', () => {
@@ -27,6 +31,52 @@ test('EpisodeInput coerces number-like fields for storyboard', () => {
   assert.equal(parsed.episode, 2);
   assert.equal(parsed.cfgScale, 7.5);
   assert.equal(parsed.refine, true);
+});
+
+test('SeriesInput new accepts upfront questionnaire fields (each audioStrategy)', () => {
+  for (const strategy of ['native', 'lip-sync', 'narrator-vo'] as const) {
+    const parsed = SeriesInput.parse({
+      action: 'new',
+      name: 'Test',
+      concept: 'A test series.',
+      audioStrategy: strategy,
+    });
+    if (parsed.action !== 'new') throw new Error('expected new');
+    assert.equal(parsed.audioStrategy, strategy, `audioStrategy=${strategy} round-trips`);
+  }
+});
+
+test('SeriesInput new accepts upfront questionnaire fields (each videoFamilyPreference)', () => {
+  for (const family of ['auto', 'seedance', 'happyhorse', 'grok-imagine', 'kling-o3'] as const) {
+    const parsed = SeriesInput.parse({
+      action: 'new',
+      name: 'Test',
+      concept: 'A test series.',
+      videoFamilyPreference: family,
+    });
+    if (parsed.action !== 'new') throw new Error('expected new');
+    assert.equal(parsed.videoFamilyPreference, family, `videoFamilyPreference=${family} round-trips`);
+  }
+});
+
+test('SeriesInput new rejects unknown audioStrategy values', () => {
+  const result = SeriesInput.safeParse({
+    action: 'new',
+    name: 'Test',
+    concept: 'A test series.',
+    audioStrategy: 'auto-dub', // not in the enum
+  });
+  assert.equal(result.success, false, 'arbitrary strings must be rejected');
+});
+
+test('SeriesInput new rejects unknown videoFamilyPreference values', () => {
+  const result = SeriesInput.safeParse({
+    action: 'new',
+    name: 'Test',
+    concept: 'A test series.',
+    videoFamilyPreference: 'sora-3-pro', // not in the enum
+  });
+  assert.equal(result.success, false, 'arbitrary strings must be rejected');
 });
 
 test('SeriesInput rejects explore_aesthetic count out of range', () => {

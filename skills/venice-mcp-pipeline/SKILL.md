@@ -7,6 +7,61 @@ description: Use when the user asks the agent to drive the venice-video-mcp serv
 
 This skill is the workflow brain for the **venice-video-mcp** server. It tells you which of the six tools to call, in what order, for the most common requests.
 
+## STEP 0 — Upfront questionnaire (ask BEFORE `series.new`)
+
+A 30-second conversation at series-creation time eliminates an entire class of expensive bugs. **Always ask these two questions before calling `series.new`**, unless the user has already volunteered the answers. Persist them via the new `audioStrategy` and `videoFamilyPreference` fields on `series.new`.
+
+### Question 1 — How does dialogue reach the final mix?
+
+Ask the user:
+
+> "How will characters talk in this episode?
+>   - **(a) Native voices** — let the video model speak the lines on-camera. Best when characters speak only once or twice each.
+>   - **(b) Lip-sync** — render the dialogue with Venice TTS, then lip-sync each character's mouth to the audio (Wan 2.7). Best when a character speaks many times so a single voice persists across the episode, or when you need accent / language control.
+>   - **(c) Narrator voice-over** — a single narrator speaks over the visuals; no character mouths move. (Nature documentaries, mock-Audubon, true-crime-style)."
+
+Map their answer to `series.new audioStrategy`:
+- (a) → `audioStrategy: 'native'`
+- (b) → `audioStrategy: 'lip-sync'`
+- (c) → `audioStrategy: 'narrator-vo'`
+
+What this controls automatically:
+- `'native'` keeps `assemble.assemble dialogueReplace: false` and lets Seedance speak.
+- `'lip-sync'` flips `assemble.assemble dialogueReplace` default to `true` (Venice TTS) and routes face-visible low/medium-motion dialogue shots through Wan 2.7 for actual lip-sync. Character `voiceDesc` becomes the TTS voice spec, not just a hint to Seedance.
+- `'narrator-vo'` sets `audioMix.suppressModelNarration: true` so Seedance is queued with `audio: false` on every dialogue shot (no competing AI narrator); flips `dialogueReplace` default to `true` and `nativeVolume` default to `0`. This is the configuration that would have prevented every double-narration version of the PNW field-guide.
+
+### Question 2 — Which video model family?
+
+Ask the user:
+
+> "Which video model family fits the look you want?
+>   - **(a) Seedance 2.0** (default) — strong R2V identity anchoring, 4-15s native durations, mature audio generation, photoreal-leaning.
+>   - **(b) HappyHorse 1.0** — strong R2V like Seedance, but livelier hand-camera realism and more cinematic grain. Good for documentary / vérité aesthetics.
+>   - **(c) Grok Imagine** — atmosphere-rich but no native R2V (character consistency falls back to Kling O3 R2V). Pick when the character is silhouetted / out-of-focus most of the time.
+>   - **(d) Kling O3** — best for stylized, illustrated, anime, or non-photoreal aesthetics. Accepts non-seedream input images.
+>   - **(?) Not sure** — pick `auto` and decide later."
+
+Map their answer to `series.new videoFamilyPreference`:
+- (a) → `'seedance'` (or omit / `'auto'`)
+- (b) → `'happyhorse'`
+- (c) → `'grok-imagine'`
+- (d) → `'kling-o3'`
+- (?) → `'auto'`
+
+This swaps the series's default `actionModel` / `atmosphereModel` / `characterConsistencyModel`. `lipSyncModel` stays on Wan 2.7 regardless — it's the only Venice model with proper lip-sync today, so the answer to Q1 still works.
+
+### Question 3 (optional, only when uncertain) — Aspect ratio
+
+If the user hasn't told you the platform / aspect ratio, ask whether the episode is **16:9 (widescreen / YouTube / cinema)**, **9:16 (TikTok / Reels / Shorts)**, or **1:1 (Instagram feed)**. Persist via `series.set_aesthetic` (set `storyboardAspectRatio` in `series.json` separately). The harness defaults to 9:16 if nothing is set, which is wrong for most narrative work.
+
+### When to skip the questionnaire
+
+- The user has already specified both answers in the same message.
+- The user is iterating on an existing series and explicitly says "use the existing config".
+- The user opts out ("just pick reasonable defaults"). In that case use `audioStrategy: 'native'` and `videoFamilyPreference: 'auto'` — and **say** that's what you're doing.
+
+If the user only answers one of the two, ask the other before proceeding. Don't guess.
+
 ## The 6 tools (always-loaded surface)
 
 | Tool | Actions | Long-running? |

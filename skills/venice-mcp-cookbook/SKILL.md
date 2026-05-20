@@ -20,15 +20,34 @@ Defaults reflect venice-video-harness v2.1.x: video defaults are Seedance 2.0 i2
 ## series
 
 ### `series.new`
+
+**Always ask the upfront questionnaire (see pipeline skill STEP 0) before calling this.** The two optional fields below — `audioStrategy` and `videoFamilyPreference` — persist to `series.json` and steer model selection and audio routing for the whole series. Getting them right at this step prevents the double-narration / lip-sync-mismatch / wrong-family classes of bugs.
+
 ```json
 {
   "action": "new",
   "name": "The Audacity",
   "concept": "A wildly sarcastic talk show host interviews guests and dispenses weaponized life advice.",
   "genre": "comedy",
-  "setting": "An absurdly lavish talk show studio with gold accents, velvet chairs, dramatic backlighting, and a live audience that gasps on cue."
+  "setting": "An absurdly lavish talk show studio with gold accents, velvet chairs, dramatic backlighting, and a live audience that gasps on cue.",
+  "audioStrategy": "native",
+  "videoFamilyPreference": "seedance"
 }
 ```
+
+`audioStrategy` (optional, ask first):
+- `"native"` — video model speaks the dialogue in-frame. Default. Best when characters say 1-2 lines each. `assemble.assemble` keeps `dialogueReplace: false`.
+- `"lip-sync"` — Venice TTS renders each line, Wan 2.7 lip-syncs the mouth. Best when characters speak many times so a single TTS voice persists. `assemble.assemble` defaults `dialogueReplace: true`.
+- `"narrator-vo"` — voice-over only (NARRATOR), no on-camera mouths. Auto-sets `audioMix.suppressModelNarration: true` so Seedance gets `audio: false` for every dialogue shot, and `assemble.assemble` defaults `dialogueReplace: true` + `nativeVolume: 0`.
+
+`videoFamilyPreference` (optional, ask first):
+- `"auto"` / unset — Seedance 2.0 across the board (current default).
+- `"seedance"` — explicit Seedance 2.0 (persisted).
+- `"happyhorse"` — HappyHorse 1.0 i2v + R2V. Livelier hand-camera realism, more cinematic grain. Same provenance gate as Seedance.
+- `"grok-imagine"` — Grok Imagine i2v. No R2V variant; character-consistency falls back to Kling O3 R2V automatically.
+- `"kling-o3"` — Kling O3 Standard everywhere. Best for stylized / illustrated aesthetics.
+
+`lipSyncModel` stays on Wan 2.7 regardless of family — it's the only Venice model with proper lip-sync today.
 
 ### `series.list`
 ```json

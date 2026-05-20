@@ -14,12 +14,20 @@ export async function handleSeries(input: SeriesInputT): Promise<ToolContent> {
           '-g', input.genre,
           '--setting', input.setting,
         ];
+        // Upfront questionnaire answers — see schemas.ts SeriesNew.
+        if (input.audioStrategy) args.push('--audio-strategy', input.audioStrategy);
+        if (input.videoFamilyPreference) args.push('--video-family', input.videoFamilyPreference);
+
         const r = await runHarness(args);
         if (!r.ok) return fromHarness(r, 'new-series failed');
         const slug = slugify(input.name);
         return fromHarness(r, `created series "${input.name}"`, {
           paths: { project: `output/${slug}`, seriesJson: `output/${slug}/series.json` },
-          data: { slug },
+          data: {
+            slug,
+            ...(input.audioStrategy ? { audioStrategy: input.audioStrategy } : {}),
+            ...(input.videoFamilyPreference ? { videoFamilyPreference: input.videoFamilyPreference } : {}),
+          },
         });
       }
       case 'list': {
