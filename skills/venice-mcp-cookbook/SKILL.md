@@ -44,7 +44,7 @@ Defaults reflect venice-video-harness v2.1.x: video defaults are Seedance 2.0 i2
 - `"auto"` / unset — Seedance 2.0 across the board (current default).
 - `"seedance"` — explicit Seedance 2.0 (persisted).
 - `"happyhorse"` — HappyHorse 1.0 i2v + R2V. Livelier hand-camera realism, more cinematic grain. Same provenance gate as Seedance.
-- `"grok-imagine"` — Grok Imagine i2v. No R2V variant; character-consistency falls back to Kling O3 R2V automatically.
+- `"grok-imagine"` — Grok Imagine i2v + R2V (R2V durations stepped at 5s / 8s / 10s only). Family stays in-family for character consistency.
 - `"kling-o3"` — Kling O3 Standard everywhere. Best for stylized / illustrated aesthetics.
 
 `lipSyncModel` stays on Wan 2.7 regardless of family — it's the only Venice model with proper lip-sync today.

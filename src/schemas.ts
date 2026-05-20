@@ -45,7 +45,7 @@ export const SeriesNew = z.object({
     '"auto" (default) — Seedance 2.0 across the board. ' +
     '"seedance" — explicit Seedance 2.0 (same as auto, but persisted). ' +
     '"happyhorse" — HappyHorse 1.0 for livelier hand-camera realism / cinematic grain. ' +
-    '"grok-imagine" — Grok Imagine i2v (no R2V variant; character consistency falls back to Kling O3 R2V — pick when atmosphere matters more than precise identity locks). ' +
+    '"grok-imagine" — Grok Imagine i2v + R2V (R2V durations stepped at 5s/8s/10s only; the duration preflight will catch off-ladder shots). ' +
     '"kling-o3" — Kling O3 Standard for stylized / illustrated aesthetics.',
   ),
 }).strict();

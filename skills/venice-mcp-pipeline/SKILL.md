@@ -35,9 +35,9 @@ What this controls automatically:
 Ask the user:
 
 > "Which video model family fits the look you want?
->   - **(a) Seedance 2.0** (default) — strong R2V identity anchoring, 4-15s native durations, mature audio generation, photoreal-leaning.
+>   - **(a) Seedance 2.0** (default) — strong R2V identity anchoring, 4-15s native durations, mature audio generation, photoreal-leaning. The `seedance-2-0-fast-*` variants are cheaper / quicker for the same family.
 >   - **(b) HappyHorse 1.0** — strong R2V like Seedance, but livelier hand-camera realism and more cinematic grain. Good for documentary / vérité aesthetics.
->   - **(c) Grok Imagine** — atmosphere-rich but no native R2V (character consistency falls back to Kling O3 R2V). Pick when the character is silhouetted / out-of-focus most of the time.
+>   - **(c) Grok Imagine** — atmosphere-rich, in-family R2V (added 2026-05). R2V durations are stepped at 5s / 8s / 10s only; the duration preflight will catch any shot scripted outside that ladder.
 >   - **(d) Kling O3** — best for stylized, illustrated, anime, or non-photoreal aesthetics. Accepts non-seedream input images.
 >   - **(?) Not sure** — pick `auto` and decide later."
 
@@ -49,6 +49,16 @@ Map their answer to `series.new videoFamilyPreference`:
 - (?) → `'auto'`
 
 This swaps the series's default `actionModel` / `atmosphereModel` / `characterConsistencyModel`. `lipSyncModel` stays on Wan 2.7 regardless — it's the only Venice model with proper lip-sync today, so the answer to Q1 still works.
+
+**Other families in the registry** that the questionnaire intentionally doesn't expose (override via direct edit of `series.json videoDefaults` if needed):
+
+- `runway-gen4-5` / `runway-gen4-turbo` / `runway-gen4-aleph` — Runway Gen-4.5 family. Strong motion physics, 7 aspect ratios, but silent (no audio, not configurable) and no R2V. Pick for music videos / atmosphere reels where dialogue isn't a factor.
+- `davinci-magihuman-image-to-video` — talking-head specialist, 5-30s lip-sync via `audio_url`. Longer max duration than Wan 2.7 (30s vs 15s), but 16:9 only. Consider as an alternative `lipSyncModel` for documentary / interview formats.
+- `sora-2-pro-image-to-video` — now 20s + `true_1080p` (refreshed 2026-05). Pick when delivery quality matters more than R2V identity locking (Sora has no R2V).
+- `pixverse-c1-*` — new PixVerse C1 line. Replaces v5.6 for new projects: same four resolutions but 15s ladder + new R2V variant.
+- `kling-v3-4k-*` — 4K variants of the Kling V3 family.
+- `wan-2-7-spicy-image-to-video` — uncensored Wan 2.7 i2v variant.
+- `wan-2.6-reference-to-video` — Wan 2.6 R2V (10s max), accepts `audio_url` input.
 
 ### Question 3 (optional, only when uncertain) — Aspect ratio
 
