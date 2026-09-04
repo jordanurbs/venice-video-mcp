@@ -1,6 +1,6 @@
 {
   "name": "venice-video-mcp",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Token-lean MCP server that wraps the Venice Video Harness CLI (v2.3.x with automatic Seedance R2V \u2192 Wan 2.7 keyframes, no-overlap audio scheduling, and continuity rules). 6 verb tools + companion skills for consistency-first AI video creation.",
   "type": "module",
   "main": "dist/server.js",
