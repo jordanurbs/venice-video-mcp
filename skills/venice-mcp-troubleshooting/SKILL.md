@@ -216,6 +216,19 @@ For pre-2.2.0 harness installs, the manual two-stage workflow still works: see g
 **Cause:** Venice queue is slow under load. Default poll loop in the harness handles it, but the MCP-side `runHarness` doesn't time out by default.
 **Fix:** The harness streams progress lines; if you don't see any for >5 minutes, check `VENICE_API_KEY` and Venice's status page. Aborting the MCP request kills the child process.
 
+### `media.loop` looks "generated in advance" / stops evolving while watched
+**Symptom:** The browser loop plays the same clips on repeat and doesn't seem to keep rendering new takes as you watch.
+**Cause:** Loop mode *does* play and render concurrently (it never pre-generates) — so a static-looking loop is one of:
+1. **It's paused.** It hit `--budget` (default $2) or someone clicked Pause; a paused loop just replays what's on disk. The UI badge reads `paused`, with a "Resume (authorize more budget)" button.
+2. **Wrong mode for watching.** `production`/`create` renders each shot slowly on Max R2V — on a short/few-shot plan one take takes longer to render than a full loop cycle takes to play, so evolution lags badly. It's the "gather keeper takes" lane, not a live-evolving watch. Use `looping` (Turbo renders faster than it plays) to see it change.
+3. **A stale long-running process.** `venice-video loop` (and the dev `tsx` path) is a persistent process that loads the harness source once at startup and **does not hot-reload**. If the loop was started before a harness update/rebuild, it's running old code.
+**Fix:** Resume (or raise `--budget` / pass `--unbounded`); switch to `--mode looping` for a visibly-evolving watch; and after any harness update **kill and restart** the loop so it picks up the new code.
+
+### `media.loop` stopped after exactly N takes per shot, with budget left and nothing pinned
+**Symptom:** Every shot has exactly `--max-takes` takes (e.g. 3), `running` is `false`, spend is below `--budget`, no shots are pinned.
+**Cause:** This is the pre-2.19.0 behavior, where `--max-takes` was a **settle/stop condition**. In current code (harness ≥ 2.19.0) `--max-takes` is a **ring buffer** (candidate takes kept per shot; older ones pruned) and the loop **regenerates forever until the budget or a Pause** — it never self-stops with budget remaining and nothing pinned. So a loop that stopped this way is a **stale process** running the old engine (see the staleness point above).
+**Fix:** `kill` the loop process and restart `venice-video loop …`. The current build (guarded by the test "the loop regenerates continuously and only the budget stops it") will keep generating past `--max-takes`. If you see this on a freshly-started ≥2.19.0 loop, that *would* be a real bug — capture the `loop-manifest.json` and report it.
+
 ### `assemble.assemble` produces a final mp4 with no audio
 **Cause:** `dialogueReplace: true` but no Venice TTS dialogue was generated.
 **Fix (now the default path):** Pass `dialogueReplace: false` and `nativeVolume: 1.0` to use the video model's native audio. As of 2026-05 the MCP defaults are exactly this — native dialogue from Seedance/Wan/HappyHorse, music and ambient added in post — because Venice's TTS voices are still limited in range. Only flip `dialogueReplace: true` (and also run `media.override_audio { dialogue: true }` upstream) when the user explicitly wants TTS for accent control, language swap, or to fix a botched native take.

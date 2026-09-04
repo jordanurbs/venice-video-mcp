@@ -39,7 +39,7 @@ export const SeriesNew = z.object({
     '"lip-sync" — Venice TTS renders each line, the video model receives it as audio_url, and the mouth follows that exact recording. Pick this when delivery must match a specific recording (cloned voice, scripted read, localized dub). Cost depends on the family: Seedance and MiniMax H3 do it in-family on their R2V lane, keeping reference anchoring at normal cost; every other family routes out to Wan 2.7 i2v, which forfeits R2V reference anchoring and doubles per-shot cost via the Seedance-keyframe pipeline. assemble-episode defaults dialogueReplace=true. ' +
     '"narrator-vo" — the speaker is a NARRATOR / voice-over only, no on-camera mouth movement (auto-sets audioMix.suppressModelNarration=true; assemble-episode defaults dialogueReplace=true and nativeVolume=0 so a competing AI narrator can\'t fight the TTS).',
   ),
-  videoFamilyPreference: z.enum(['auto', 'seedance', 'wan-3-0', 'happyhorse', 'minimax-h3', 'grok-imagine', 'kling-o3']).optional().describe(
+  videoFamilyPreference: z.enum(['auto', 'seedance', 'wan-3-0', 'happyhorse', 'minimax-h3', 'minimax-h3-max', 'minimax-h3-max-turbo', 'grok-imagine', 'kling-o3']).optional().describe(
     'Preferred video model family for action/atmosphere/character shots. Ask BEFORE calling series.new. ' +
     'Swaps actionModel/atmosphereModel/characterConsistencyModel, and picks lipSyncModel (only used when audioStrategy is "lip-sync"): Seedance and MiniMax H3 stay in-family on their R2V lane, every other family falls back to Wan 2.7 i2v. ' +
     '"auto" (default) — Seedance 2.0 across the board. ' +
@@ -47,6 +47,8 @@ export const SeriesNew = z.object({
     '"wan-3-0" — Wan 3.0: the only family that renders past 15s (5/10/15/20/25/30s at 480p/720p/1080p), native audio always on, R2V takes up to 9 refs. It accepts no audio input, so exact lip-sync leaves the family. ' +
     '"happyhorse" — HappyHorse 1.1 (Alibaba, #1 blind-preference T2V + I2V): joint single-pass video+audio, 7-language phoneme lip-sync, R2V with up to 9 refs. Best for talking characters + multilingual localization (SFW-leaning). ' +
     '"minimax-h3" — MiniMax H3, the open-weight omni-modal model: every render is 2K with native stereo audio at roughly a third the per-second cost, R2V takes up to 9 refs. Two constraints to plan around: 2K is the ONLY resolution (no cheap draft tier, so each take is a finish-quality spend) and the duration ladder starts at 5s, so 3-4s beats must be re-scripted or routed to another family. ' +
+    '"minimax-h3-max" — MiniMax H3 Max. Related to MiniMax H3 in name only: it renders 768P (2K is rejected), it is private rather than anonymized, and it wants a PLAIN prompt — one or two sentences of intent — because it stages its own framing, coverage, and cutting. Over-directing it flattens the result, so the harness strips blocking, locked location descriptions, and geography-hold clauses from its prompts automatically. That instinct makes it the montage family: describe the sequence and let the model tell it. 5-15s ladder, $0.024/s. ' +
+    '"minimax-h3-max-turbo" — the same model at half the price ($0.012/s, the cheapest lane available), which makes 15s takes cheap enough to generate several and pick. It ships no R2V lane, so character-identity shots cross to the H3 Max R2V. ' +
     '"grok-imagine" — Grok Imagine i2v + R2V (R2V durations stepped at 5s/8s/10s only; the duration preflight will catch off-ladder shots). ' +
     '"kling-o3" — Kling O3 Standard for stylized / illustrated aesthetics.',
   ),
@@ -313,12 +315,40 @@ export const MediaGenerateAmbient = z.object({
   duration: coercePositiveInt({ min: 3, max: 120 }).default(22).describe('Seconds, default 22'),
 }).strict();
 
+// ── Loop mode (gate-skipping alternate path) ───────────────────────────────
+// `venice-video loop` is NOT part of the linear pipeline: once a shot script
+// exists it renders the whole plan continuously and serves a live browser loop
+// that hot-swaps fresh takes. It boots a persistent local web server, so unlike
+// every other media action this one returns as soon as the server is ready
+// (with the URL + pid) and leaves it running for the session — it does not wait
+// for a render to finish. See tools/media.ts `loop` case and the harness's
+// `venice-video loop` command / AGENTS.md rule 58.
+export const MediaLoop = z.object({
+  action: z.literal('loop'),
+  project: Project,
+  episode: Episode,
+  mode: z.enum(['looping', 'production']).describe(
+    'REQUIRED, deliberate quality-vs-flow decision — the loop\'s whole point, so it is never defaulted. ' +
+    '"looping" — creative flow, lower quality: MiniMax H3 Max Turbo @480P, the first shot renders t2v then every later shot chains i2v off the previous last frame, NO R2V, identity NOT locked. A fast, disposable draft to watch and riff on. ' +
+    '"production" — gather usable shots, higher quality: MiniMax H3 Max R2V @768P with the full @Image reference stack + voice-donor audio, identity locked, each shot rendered independently. The takes are keepers.',
+  ),
+  budget: coerceFiniteNumber({ min: 0 }).optional().describe('Pause after this much estimated spend (USD, default 2). Loop mode plays AND renders concurrently (it does not pre-generate) — but at the default $2 it PAUSES after roughly the first pass and then just replays what exists, which looks pre-generated. Raise this (or set unbounded) to keep it generating fresh takes while the user watches. Each Start/regenerate in the UI authorizes another budget.'),
+  duration: z.string().optional().describe('Per-take duration, snapped to the 5-15s ladder (default 15s, the model max).'),
+  resolution: z.enum(['480P', '768P']).optional().describe('Draft resolution. Defaults to 480P (looping) / 768P (production).'),
+  maxTakes: coercePositiveInt({ min: 1, max: 20 }).optional().describe('Candidate takes kept per shot (a ring buffer; the loop regenerates forever until stopped or the budget is hit). Default 3.'),
+  chain: z.boolean().optional().describe('Chain each shot i2v off the previous shot\'s last frame so the loop plays as one continuous piece. Defaults on for looping, off for production (R2V and a start frame can\'t combine on MiniMax). Pass false to force independent shots.'),
+  once: z.boolean().default(false).describe('Render one take per shot, then stop (no regeneration).'),
+  unbounded: z.boolean().default(false).describe('Regenerate forever with NO budget cap (spends until stopped). Use with care.'),
+  port: coercePositiveInt({ min: 1, max: 65535 }).optional().describe('Port for the local web UI (default 3000; the server falls back to a free port if busy).'),
+}).strict();
+
 export const MediaInput = z.discriminatedUnion('action', [
   MediaGenerateVideos,
   MediaOverrideAudio,
   MediaGenerateMusic,
   MediaValidate,
   MediaGenerateAmbient,
+  MediaLoop,
 ]);
 
 export const AssembleAssemble = z.object({
@@ -531,20 +561,28 @@ export const EpisodeShape = z.object({
 }).shape;
 
 export const MediaShape = z.object({
-  action: z.enum(['generate_videos', 'override_audio', 'generate_music', 'validate', 'generate_ambient'])
-    .describe('Action: generate_videos (long-running), override_audio (Venice TTS or SFX), generate_music, validate, generate_ambient (Venice SFX → ambient-<layer>.mp3 in episode audio dir)'),
+  action: z.enum(['generate_videos', 'override_audio', 'generate_music', 'validate', 'generate_ambient', 'loop'])
+    .describe('Action: generate_videos (long-running), override_audio (Venice TTS or SFX), generate_music, validate, generate_ambient (Venice SFX → ambient-<layer>.mp3 in episode audio dir), loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously; returns a URL + pid and keeps running in the background)'),
   project: Project.describe('series slug or path'),
   episode: Episode.describe('episode number'),
   skipQa: z.boolean().optional().describe('(generate_videos) skip QA approval check'),
   dialogue: z.boolean().optional().describe('(override_audio) override dialogue with Venice TTS'),
   sfx: z.boolean().optional().describe('(override_audio) generate SFX overrides'),
   prompt: z.string().optional().describe('(generate_music, generate_ambient) prompt for the model'),
-  duration: z.union([z.string(), z.coerce.number()]).optional().describe('(generate_music) seconds (string ok), default 60; (generate_ambient) seconds, default 22'),
+  duration: z.union([z.string(), z.coerce.number()]).optional().describe('(generate_music) seconds (string ok), default 60; (generate_ambient) seconds, default 22; (loop) per-take duration e.g. "15s", default 15s'),
   model: z.string().optional().describe('(generate_music) Venice music/audio model id, e.g. "seed-audio-1-0" for expressive prompt-driven narration/VO; default elevenlabs-music'),
   voice: z.string().optional().describe('(generate_music) voice id for voice-enabled models (e.g. seed-audio-1-0)'),
   speed: z.coerce.number().optional().describe('(generate_music) playback speed for speed-enabled models (seed-audio-1-0: 0.5–2)'),
   videoOutputs: z.boolean().optional().describe('(validate) run validate-video-outputs instead of validate-episode'),
   layer: z.enum(AMBIENT_LAYERS).optional().describe('(generate_ambient) ambient slot: rain-heavy | rain | crowd | quiet-night'),
+  mode: z.enum(['looping', 'production']).optional().describe('(loop) REQUIRED for loop — the deliberate quality-vs-flow decision. "looping" = creative flow, lower quality (Turbo 480P, t2v→i2v chaining, identity not locked); "production" = gather usable shots, higher quality (Max R2V @768P, identity locked)'),
+  budget: z.coerce.number().optional().describe('(loop) spend cap in USD, default 2; each UI Start/regenerate authorizes another budget'),
+  resolution: z.enum(['480P', '768P']).optional().describe('(loop) draft resolution; defaults 480P (looping) / 768P (production)'),
+  maxTakes: z.coerce.number().int().optional().describe('(loop) candidate takes kept per shot (ring buffer), default 3'),
+  chain: z.boolean().optional().describe('(loop) i2v last-frame chaining; default on for looping, off for production. Pass false to render shots independently'),
+  once: z.boolean().optional().describe('(loop) render one take per shot then stop (no regeneration)'),
+  unbounded: z.boolean().optional().describe('(loop) remove the budget cap and regenerate forever (spends until stopped)'),
+  port: z.coerce.number().int().optional().describe('(loop) local web UI port, default 3000 (falls back to a free port if busy)'),
 }).shape;
 
 export const AssembleShape = z.object({

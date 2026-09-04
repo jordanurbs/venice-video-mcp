@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getHarnessConfig, getHarnessRoot, getVeniceApiKey } from './config.js';
@@ -161,6 +161,136 @@ export async function runHarness(
 
 export function harnessRoot(): string | null {
   return getHarnessRoot();
+}
+
+/**
+ * Persistent harness servers (currently only `loop`) launched via MCP. Held in
+ * a module-level set so they are not garbage-collected and so their lifecycle
+ * is tied to THIS MCP process: they are ordinary attached children (not
+ * detached), so when the MCP server stops — e.g. the client closes — they stop
+ * too. No orphaned web server keeps spending on a port the user forgot about.
+ */
+const liveServers = new Set<ChildProcess>();
+
+/** Best-effort SIGTERM to every server this process launched. */
+export function stopLiveServers(): void {
+  for (const child of liveServers) {
+    try { child.kill('SIGTERM'); } catch { /* already gone */ }
+  }
+  liveServers.clear();
+}
+
+export interface ServerLaunch {
+  /** OS pid of the running server (so a human can `kill` it if they want). */
+  pid: number;
+  /** The stdout substring that matched `readyRegex` (usually carries the URL). */
+  matched: string;
+  stdout: string;
+  stderr: string;
+  command: string;
+}
+
+function tailLines(s: string, lines: number): string {
+  const arr = s.split('\n');
+  return arr.slice(Math.max(0, arr.length - lines)).join('\n').trim();
+}
+
+/**
+ * Launch a harness command that starts a PERSISTENT server (e.g. `loop`, which
+ * boots the local web UI and then blocks forever) and resolve as soon as it
+ * reports ready — rather than waiting for it to exit, which never happens.
+ *
+ * The child is left running, attached to this process, so it lives for the
+ * session and is cleaned up with the MCP server (see `liveServers`). Rejects if
+ * the process exits before readiness, errors, or the startup window elapses.
+ */
+export async function launchHarnessServer(
+  args: string[],
+  opts: {
+    readyRegex: RegExp;
+    startupTimeoutMs?: number;
+    env?: Record<string, string>;
+    cwd?: string;
+  },
+): Promise<ServerLaunch> {
+  const cfg = getHarnessConfig();
+  const fullArgs = [...cfg.args, ...args];
+  const env = buildHarnessEnv(opts.env);
+  const startupTimeoutMs = opts.startupTimeoutMs ?? 30_000;
+  const command = `${cfg.bin} ${fullArgs.join(' ')}`;
+
+  return new Promise<ServerLaunch>((resolvePromise, reject) => {
+    const child = spawn(cfg.bin, fullArgs, {
+      cwd: opts.cwd ?? cfg.cwd,
+      env,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    const MAX_CAPTURE_CHARS = 200_000;
+    let stdoutText = '';
+    let stderrText = '';
+    let settled = false;
+    const appendBounded = (existing: string, chunk: string): string => {
+      const combined = existing + chunk;
+      return combined.length <= MAX_CAPTURE_CHARS ? combined : combined.slice(-MAX_CAPTURE_CHARS);
+    };
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill('SIGTERM');
+      setTimeout(() => child.kill('SIGKILL'), 3000).unref();
+      reject(new Error(
+        `server did not report ready within ${Math.round(startupTimeoutMs / 1000)}s\n`
+        + tailLines(stderrText || stdoutText, 20),
+      ));
+    }, startupTimeoutMs);
+
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      // After readiness we keep the listener attached purely to drain the pipe
+      // (a full OS buffer would block the child); we just stop inspecting it.
+      if (settled) return;
+      stdoutText = appendBounded(stdoutText, chunk);
+      const match = opts.readyRegex.exec(stdoutText);
+      if (!match) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      liveServers.add(child);
+      child.once('exit', () => liveServers.delete(child));
+      resolvePromise({
+        pid: child.pid ?? -1,
+        matched: match[0],
+        stdout: stdoutText,
+        stderr: stderrText,
+        command,
+      });
+    });
+
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      if (settled) return;
+      stderrText = appendBounded(stderrText, chunk);
+    });
+
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      reject(err);
+    });
+
+    child.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutHandle);
+      reject(new Error(
+        `server exited before reporting ready (exit ${code ?? 'null'})\n`
+        + tailLines(stderrText || stdoutText, 30),
+      ));
+    });
+  });
 }
 
 export function buildHarnessEnv(extraEnv: Record<string, string> = {}): Record<string, string> {

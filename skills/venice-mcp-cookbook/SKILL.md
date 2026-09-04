@@ -45,10 +45,12 @@ Defaults reflect venice-video-harness v2.1.x: video defaults are Seedance 2.0 i2
 - `"seedance"` — explicit Seedance 2.0 (persisted).
 - `"happyhorse"` — HappyHorse 1.1 i2v + R2V (Alibaba, #1 blind-preference T2V + I2V). Joint single-pass video+audio, 7-language phoneme lip-sync, R2V up to 9 refs. Best for talking characters + multilingual localization; SFW-leaning. Same provenance gate as Seedance. (1.0 IDs remain in the registry for back-compat.)
 - `"minimax-h3"` — MiniMax H3 i2v + R2V (open-weight omni-modal). 2K with native stereo audio at ~1/3 the per-second cost, R2V up to 9 refs. 2K is the only resolution (no draft tier) and durations run 5-15s, so script the beats on a 5s floor.
+- `"minimax-h3-max"` — MiniMax H3 Max i2v + R2V. Shares the name with MiniMax H3 and little else: **768P** (2K is rejected — the inverse of H3), `private` rather than anonymized, and it wants a **plain one- or two-sentence prompt** because it stages its own framing, coverage, and cutting. The harness strips blocking, locked location descriptions, and geography-hold clauses from its prompts automatically, so don't hand-write them back in. That instinct makes it the montage family: describe the sequence and let the model tell it. 5-15s ladder, $0.024/s.
+- `"minimax-h3-max-turbo"` — the same model at $0.012/s, the cheapest lane in the registry, so 15s takes are cheap enough to render several and pick. No R2V lane exists, so character-consistency and lip-sync shots route to `minimax-h3-max-reference-to-video`.
 - `"grok-imagine"` — Grok Imagine i2v + R2V (R2V durations stepped at 5s / 8s / 10s only). Family stays in-family for character consistency.
 - `"kling-o3"` — Kling O3 Standard everywhere. Best for stylized / illustrated aesthetics.
 
-`lipSyncModel` stays on Wan 2.7 regardless of family — it's the only Venice model that syncs a mouth to a supplied recording — and it goes unused unless `audioStrategy` is `"lip-sync"`.
+`lipSyncModel` goes unused unless `audioStrategy` is `"lip-sync"`. Families whose own R2V lane takes a top-level `audio_url` stay in-family (Seedance, MiniMax H3, MiniMax H3 Max — always the `-reference-to-video` lane); the rest fall back to Wan 2.7 i2v, which syncs a mouth to a supplied recording but forfeits reference anchoring.
 
 ### `series.list`
 ```json
@@ -425,6 +427,43 @@ A crowd bed for the studio interior:
   "duration": 30
 }
 ```
+
+### `media.loop`
+Start **loop mode** — a gate-skipping live browser loop that renders the whole shot script continuously and hot-swaps fresh takes as they finish. It skips the storyboard/QA gates (the only prerequisite is a shot script from `episode.workshop`) and writes only under `episodes/episode-NNN/loop/`, never touching the canonical cut. **Unlike every other media action it returns fast** — as soon as the local web server reports its URL — and leaves the server running in the background; it does not wait for a render to finish. The response carries `data.url` (open it in a browser to watch) and `data.pid` (kill it to stop early; it also stops when the MCP session ends).
+
+`mode` is **required** and never defaulted — it's a deliberate quality-vs-flow decision, so ask the user which one they want:
+
+Looping (creative flow, lower quality — Turbo @480P, t2v then i2v chaining, identity NOT locked; a disposable draft to riff on):
+```json
+{
+  "action": "loop",
+  "project": "the-audacity",
+  "episode": 1,
+  "mode": "looping"
+}
+```
+
+Production (gather usable takes, higher quality — Max R2V @768P with the full reference stack + voice-donor audio, identity locked), with a raised spend cap:
+```json
+{
+  "action": "loop",
+  "project": "the-audacity",
+  "episode": 1,
+  "mode": "production",
+  "budget": 5,
+  "maxTakes": 4
+}
+```
+
+Other optional flags: `duration` (per-take, default `"15s"`), `resolution` (`"480P"`/`"768P"`, defaults per mode), `chain` (i2v last-frame chaining — on for looping, off for production; pass `false` to force independent shots), `once` (one take per shot then stop), `unbounded` (remove the budget cap), `port` (default 3000).
+
+**How it evolves (why it can look "pre-generated").** Loop mode plays AND renders at the same time — it does not pre-generate the whole thing. The browser loops the takes that already exist while the worker keeps generating new ones and swaps each shot's newer take in on the loop's NEXT pass (never mid-clip). If the user says "it seems generated in advance," it's almost always one of: (1) it's **paused** — the default `budget` of $2 was hit (or Pause was clicked) and it's now just replaying what's on disk; raise `budget` or set `unbounded: true` and Resume; or (2) it's in **`production`** mode, whose slow Max R2V renders can't keep up with a short loop cycle, so evolution lags — use `looping` (Turbo renders faster than it plays) for a visibly-evolving watch. `maxTakes` is a per-shot ring buffer (default 3), not a total, so once every shot hits the cap the per-cycle change is subtle.
+
+### i2v (image-to-video): what it is and how to reach it
+"i2v" means the model animates a **supplied start image** (`image_url` — the first frame), as opposed to **R2V** (identity anchored to `reference_image_urls`, no start frame) or **t2v** (prompt only). Don't conflate i2v with R2V: a start frame is one image the motion flows out of; a reference stack is identity the model holds throughout. On the MCP surface you don't pick the lane by hand — the harness router does it per shot:
+- **`media.generate_videos`** auto-routes each shot: character shots → R2V (reference stack), establishing/atmosphere/no-character shots → i2v off the storyboard panel, and loop mode chains i2v off the previous shot's last frame. So the normal way to get i2v is to author an establishing/atmosphere shot (no `characters`) and let the router pick it.
+- **Loop mode** (`media.loop`) leans on i2v directly for continuous playback (looping mode: first shot t2v, every later shot i2v-chained).
+- To **animate a single arbitrary image you already have** (plain i2v, outside a project), there is no MCP tool for it today — use the harness's bundled `scripts/venice-video.py --image <file> --model <...-image-to-video> --prompt "<motion>"` from the `venice-video-model-routing` skill. (A first-class `animate` action is a tracked follow-up.)
 
 ---
 

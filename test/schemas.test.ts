@@ -47,7 +47,11 @@ test('SeriesInput new accepts upfront questionnaire fields (each audioStrategy)'
 });
 
 test('SeriesInput new accepts upfront questionnaire fields (each videoFamilyPreference)', () => {
-  for (const family of ['auto', 'seedance', 'happyhorse', 'grok-imagine', 'kling-o3'] as const) {
+  for (const family of [
+    'auto', 'seedance', 'wan-3-0', 'happyhorse',
+    'minimax-h3', 'minimax-h3-max', 'minimax-h3-max-turbo',
+    'grok-imagine', 'kling-o3',
+  ] as const) {
     const parsed = SeriesInput.parse({
       action: 'new',
       name: 'Test',
@@ -154,6 +158,39 @@ test('MediaInput.generate_music accepts both string and numeric duration (matche
     duration: 90,
   });
   assert.equal(shape.success, true, 'MediaShape must continue to accept numeric duration');
+});
+
+test('MediaInput.loop requires the deliberate mode and applies flag defaults', () => {
+  const parsed = MediaInput.parse({
+    action: 'loop',
+    project: 'the-audacity',
+    episode: '1',
+    mode: 'production',
+  });
+  if (parsed.action !== 'loop') throw new Error('expected loop');
+  assert.equal(parsed.episode, 1);
+  assert.equal(parsed.mode, 'production');
+  assert.equal(parsed.once, false);
+  assert.equal(parsed.unbounded, false);
+
+  // mode is the loop's whole point — it must never be defaulted away.
+  const noMode = MediaInput.safeParse({ action: 'loop', project: 'the-audacity', episode: 1 });
+  assert.equal(noMode.success, false, 'loop without a mode must be rejected');
+
+  const badMode = MediaInput.safeParse({ action: 'loop', project: 'the-audacity', episode: 1, mode: 'watch' });
+  assert.equal(badMode.success, false, 'the harness code-word "watch" is not the user-facing mode; only looping|production');
+
+  const tuned = MediaInput.parse({
+    action: 'loop', project: 'the-audacity', episode: 1, mode: 'looping',
+    budget: 5, maxTakes: 4, resolution: '480P', duration: '15s', chain: false, unbounded: true, port: 3100,
+  });
+  if (tuned.action !== 'loop') throw new Error('expected loop');
+  assert.equal(tuned.budget, 5);
+  assert.equal(tuned.maxTakes, 4);
+  assert.equal(tuned.resolution, '480P');
+  assert.equal(tuned.chain, false);
+  assert.equal(tuned.unbounded, true);
+  assert.equal(tuned.port, 3100);
 });
 
 test('AssembleInput accepts mix_audio with project + episode', () => {

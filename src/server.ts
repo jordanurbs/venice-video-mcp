@@ -28,6 +28,7 @@ import { handleEpisode } from './tools/episode.js';
 import { handleMedia } from './tools/media.js';
 import { handleAssemble } from './tools/assemble.js';
 import { handleInspect } from './tools/inspect.js';
+import { stopLiveServers } from './harness.js';
 import { err } from './responses.js';
 import type { ProgressCtx } from './progress.js';
 import {
@@ -143,7 +144,7 @@ server.registerTool(
 server.registerTool(
   'media',
   {
-    description: `Generate or override media: videos / dialogue / sfx / music / ambient beds, plus validate. Long-running; supports progress. ${SKILL_HINT}`,
+    description: `Generate or override media: videos / dialogue / sfx / music / ambient beds, validate, plus loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously and hot-swaps fresh takes; returns a URL + pid and keeps running in the background). Long-running; supports progress. ${SKILL_HINT}`,
     inputSchema: MediaShape,
   },
   async (args: any, extra: any) => {
@@ -192,6 +193,13 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write('[venice-video-mcp] connected on stdio\n');
+  // Loop mode launches persistent background web servers (see media.loop /
+  // harness.launchHarnessServer). Tie their lifecycle to this process so they
+  // never outlive the session as orphans on their port.
+  process.once('exit', stopLiveServers);
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+    process.once(sig, () => { stopLiveServers(); process.exit(0); });
+  }
   scheduleUpdateCheck();
 }
 

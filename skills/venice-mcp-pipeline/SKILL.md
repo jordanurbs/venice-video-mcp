@@ -41,22 +41,26 @@ Ask the user:
 > "Which video model family fits the look you want?
 >   - **(a) Seedance 2.0** (default) — strong R2V identity anchoring, 4-15s native durations, mature audio generation, photoreal-leaning. The `seedance-2-0-fast-*` variants are cheaper / quicker for the same family.
 >   - **(b) MiniMax H3** — the open-weight omni-modal model (added 2026-07-31). Every render is 2K with native stereo audio, at roughly a third the per-second cost of the other families, and R2V takes the same 9-image reference stack as Seedance. Two constraints to plan around: 2K is the *only* resolution, so there is no cheap draft tier and every take is a finish-quality spend; and the duration ladder starts at 5s, so any 3-4s beat has to be re-scripted or routed to another family.
->   - **(c) HappyHorse 1.1** — Alibaba's #1 blind-preference model (T2V + I2V). Joint single-pass video+audio with phoneme-level lip-sync in 7 languages (EN, Mandarin, Cantonese, JA, KO, DE, FR), and R2V with up to 9 reference images. Best for talking characters and multilingual localization; SFW/commercial-leaning (for mature work prefer Seedance or Wan). The `happyhorse` family routes here.
->   - **(d) Grok Imagine** — atmosphere-rich, in-family R2V (added 2026-05). R2V durations are stepped at 5s / 8s / 10s only; the duration preflight will catch any shot scripted outside that ladder.
->   - **(e) Kling O3** — best for stylized, illustrated, anime, or non-photoreal aesthetics. Accepts non-seedream input images.
+>   - **(c) MiniMax H3 Max** — related to MiniMax H3 in name only, and the montage family. It renders 768P (2K is rejected), it is private rather than anonymized, and it wants a PLAIN prompt: one or two sentences of intent, because it stages its own framing, coverage, and cutting. Over-directing it flattens the result, so the harness automatically strips blocking, locked location descriptions, and geography-hold clauses from its prompts. 5-15s ladder, $0.024/s. Pick it when you want to describe a sequence and let the model tell it.
+>   - **(d) MiniMax H3 Max Turbo** — the same model at $0.012/s, the cheapest lane available, which makes 15s takes cheap enough to render several and pick. No R2V lane, so character-identity shots cross to the H3 Max R2V.
+>   - **(e) HappyHorse 1.1** — Alibaba's #1 blind-preference model (T2V + I2V). Joint single-pass video+audio with phoneme-level lip-sync in 7 languages (EN, Mandarin, Cantonese, JA, KO, DE, FR), and R2V with up to 9 reference images. Best for talking characters and multilingual localization; SFW/commercial-leaning (for mature work prefer Seedance or Wan). The `happyhorse` family routes here.
+>   - **(f) Grok Imagine** — atmosphere-rich, in-family R2V (added 2026-05). R2V durations are stepped at 5s / 8s / 10s only; the duration preflight will catch any shot scripted outside that ladder.
+>   - **(g) Kling O3** — best for stylized, illustrated, anime, or non-photoreal aesthetics. Accepts non-seedream input images.
 >   - **(?) Not sure** — pick `auto` and decide later."
 
 Map their answer to `series.new videoFamilyPreference`:
 - (a) → `'seedance'` (or omit / `'auto'`)
 - (b) → `'minimax-h3'`
-- (c) → `'happyhorse'`
-- (d) → `'grok-imagine'`
-- (e) → `'kling-o3'`
+- (c) → `'minimax-h3-max'`
+- (d) → `'minimax-h3-max-turbo'`
+- (e) → `'happyhorse'`
+- (f) → `'grok-imagine'`
+- (g) → `'kling-o3'`
 - (?) → `'auto'`
 
 If they pick MiniMax H3, two things to plan for. Write the beat script on a 5-15s grid from the start — the duration preflight rejects sub-5s shots before anything is queued, but catching it at script time saves a rewrite. And keep the storyboard blocking plate in the reference stack for every shot: H3 R2V weighs reference aspect when deciding output orientation, so a character-only stack of 1:1 sheets can come back non-16:9 even with `aspect_ratio: '16:9'` set. Check the first-frame contact sheet before assembling.
 
-This swaps the series's default `actionModel` / `atmosphereModel` / `characterConsistencyModel`. `lipSyncModel` stays on Wan 2.7 regardless — it's the only Venice model that syncs a mouth to a supplied recording — and it goes unused unless Q1 was answered `lip-sync`.
+This swaps the series's default `actionModel` / `atmosphereModel` / `characterConsistencyModel`, and picks `lipSyncModel` — which goes unused unless Q1 was answered `lip-sync`. Families whose own R2V lane accepts a top-level `audio_url` stay in-family for it (Seedance, MiniMax H3, and both MiniMax H3 Max families, all on their R2V lane); everything else falls back to Wan 2.7 i2v, which forfeits reference anchoring.
 
 **Other families in the registry** that the questionnaire intentionally doesn't expose (override via direct edit of `series.json videoDefaults` if needed):
 
@@ -92,7 +96,7 @@ If the idea is still vague at series/episode-creation time, run the Seedance OS 
 | `character` | `add`, `audition_voices`, `lock`, `generate_voice_reference` | sometimes (image gen / audio gen) |
 | `location` | `add`, `generate_references`, `list` | sometimes (image gen) |
 | `episode` | `new`, `workshop`, `approve`, `storyboard`, `qa`, `qa_approve`, `fix_panel`, `insert_shot` | sometimes (storyboard, qa) |
-| `media` | `generate_videos`, `override_audio`, `generate_music`, `generate_ambient`, `validate` | **yes** |
+| `media` | `generate_videos`, `override_audio`, `generate_music`, `generate_ambient`, `validate`, `loop` | **yes** (`loop` returns fast, then runs in the background) |
 | `assemble` | `assemble`, `produce`, `mix_audio`, `edit_transcribe`, `edit_render`, `edit_timeline`, `export_timeline` | **yes** (except `export_timeline`, which is cheap XML write) |
 | `inspect` | `list`, `series`, `episode`, `shot`, `models`, `voices` | no |
 
@@ -191,6 +195,8 @@ flowchart LR
 
 `assemble.produce` is a one-shot path that runs `media.generate_videos` -> `media.generate_music` -> `assemble.assemble` in sequence. Use `produce` only when the user explicitly says "do everything," and never before QA approval.
 
+**Loop mode branches off the shot script (gate-skipping).** The chart above is the gated production path. There is one alternate entry point that is NOT a step in it: once `episode.workshop` has produced a shot script, `media.loop` renders the whole plan continuously into a live browser loop, skipping storyboard/QA and writing only under `loop/`. It is not on the way to the final cut — it's for watching the plan move or cheaply gathering takes. See Recipe 3d. (The `episode.storyboard`/`qa`/`generate_videos`/`assemble` chain is still the only route to the canonical `episode-NNN-final.mp4`.)
+
 ## Recipes
 
 ### Recipe 1: New series from scratch
@@ -253,6 +259,18 @@ Harness ≥ 2.4.0 writes a `shot-NNN.recipe.json` sidecar next to every generate
    - **content** passes — redoing one invalidates everything after it in the chain; replay the later passes too.
 3. To make a NEW shot match the episode, replay the recipe scaffolding of a good shot: same `STYLE:` string, seed, cfg, character ref paths, and the scene's `.style-anchor.png` (kept on disk for exactly this).
 4. Any finishing pass must be appended to the recipe via the harness's `appendRecipePass()` (`src/venice/recipe.ts`) so the sidecar and provenance stay honest for the next agent.
+
+### Recipe 3d: Loop mode — watch the plan render, or gather usable takes
+The user says: "let me watch the loop while it renders," "just loop episode 2 so I can riff on it," or "loop episode 2 in production mode to gather good takes."
+
+Loop mode is a **gate-skipping alternate path**, not a step in the linear pipeline. The moment a shot script exists (`episode.workshop` has run — approval and QA are NOT required), `media.loop` renders the whole plan continuously and serves a **live browser loop** that hot-swaps each shot in as its take finishes and keeps regenerating fresh takes. It writes only under `episodes/episode-NNN/loop/` and never touches the canonical cut or `series.json`, so it can run alongside production.
+
+1. Confirm a shot script exists (`inspect.episode` → `shotCount > 0`). No approval/QA needed.
+2. **Ask the user the one required decision — it is never defaulted:** is this for **looping** (creative flow, lower quality — Turbo @480P, t2v then i2v last-frame chaining, identity NOT locked; a disposable draft) or **production** (gather usable shots, higher quality — Max R2V @768P with the full reference stack + voice-donor audio, identity locked)? This is a real quality-vs-flow tradeoff, so make the user communicate it (mirrors the CLI, which errors non-interactively without `--mode`).
+3. `media.loop { project, episode, mode: 'looping' | 'production' }` — plus optional `budget` (USD spend cap, default 2), `duration`, `resolution`, `maxTakes`, `chain`, `once`, `unbounded`, `port`.
+4. The call returns **fast** with `{ url, pid }` and leaves the web server running in the background. Give the user the `url` to open. It is money-capped by `budget`; the server stops when the MCP session ends, or the user can `kill <pid>`.
+
+Loop mode is the answer whenever the user wants to *see the plan move* before committing to the gated render — or to cheaply generate several takes per shot and pin the keepers — rather than running `media.generate_videos` straight through storyboard + QA.
 
 ### Recipe 4: Generate ambient beds + run the script-aware mixer
 The user says: "Add a rain bed to episode 2 and re-mix it." or "Mix this episode with ambient layering instead of the basic assembler."
