@@ -269,6 +269,21 @@ export const MediaGenerateVideos = z.object({
   skipQa: z.boolean().default(false),
 }).strict();
 
+// Seedance 2.5 renders come back as 480p drafts (harness rule 67). This turns
+// approved drafts into the same takes at 1080p, in place.
+export const MediaUpgradeDrafts = z.object({
+  action: z.literal('upgrade_drafts'),
+  project: Project,
+  episode: Episode,
+  files: z.array(z.string()).optional().describe(
+    'Approved take paths (shot clips or masters). Omit to upgrade every draft in the episode.',
+  ),
+  confirm: z.boolean().default(false).describe(
+    'false (default): list each draft and its 1080p quote, spend nothing. true: render them. ' +
+    'Set true only after the user has watched the drafts, approved them, and accepted the quoted total.',
+  ),
+}).strict();
+
 export const MediaOverrideAudio = z.object({
   action: z.literal('override_audio'),
   project: Project,
@@ -344,6 +359,7 @@ export const MediaLoop = z.object({
 
 export const MediaInput = z.discriminatedUnion('action', [
   MediaGenerateVideos,
+  MediaUpgradeDrafts,
   MediaOverrideAudio,
   MediaGenerateMusic,
   MediaValidate,
@@ -561,11 +577,13 @@ export const EpisodeShape = z.object({
 }).shape;
 
 export const MediaShape = z.object({
-  action: z.enum(['generate_videos', 'override_audio', 'generate_music', 'validate', 'generate_ambient', 'loop'])
-    .describe('Action: generate_videos (long-running), override_audio (Venice TTS or SFX), generate_music, validate, generate_ambient (Venice SFX → ambient-<layer>.mp3 in episode audio dir), loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously; returns a URL + pid and keeps running in the background)'),
+  action: z.enum(['generate_videos', 'upgrade_drafts', 'override_audio', 'generate_music', 'validate', 'generate_ambient', 'loop'])
+    .describe('Action: generate_videos (long-running; Seedance 2.5 renders come back as 480p drafts), upgrade_drafts (after the user approves the drafts: quote, then with confirm=true render the same takes at 1080p in place), override_audio (Venice TTS or SFX), generate_music, validate, generate_ambient (Venice SFX → ambient-<layer>.mp3 in episode audio dir), loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously; returns a URL + pid and keeps running in the background)'),
   project: Project.describe('series slug or path'),
   episode: Episode.describe('episode number'),
   skipQa: z.boolean().optional().describe('(generate_videos) skip QA approval check'),
+  files: z.array(z.string()).optional().describe('(upgrade_drafts) approved take paths; omit for every draft in the episode'),
+  confirm: z.boolean().optional().describe('(upgrade_drafts) false/omitted: quote only. true: render. Only after the user approved the drafts and the quoted total'),
   dialogue: z.boolean().optional().describe('(override_audio) override dialogue with Venice TTS'),
   sfx: z.boolean().optional().describe('(override_audio) generate SFX overrides'),
   prompt: z.string().optional().describe('(generate_music, generate_ambient) prompt for the model'),

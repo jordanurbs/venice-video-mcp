@@ -1,3 +1,4 @@
+import { isAbsolute, join } from 'node:path';
 import { runHarness, runHarnessScript, launchHarnessServer } from '../harness.js';
 import { resolveProjectPath } from '../config.js';
 import { fromHarness, ok, err, type ToolContent } from '../responses.js';
@@ -20,6 +21,17 @@ export async function handleMedia(input: MediaInputT, ctx: ProgressCtx = {}): Pr
             shotsDir: `${project}/episodes/episode-${pad(input.episode)}/scene-001`,
           },
         });
+      }
+      case 'upgrade_drafts': {
+        const args = input.files?.length
+          ? ['upgrade-drafts', '--file', ...input.files.map(file => resolveProjectPath(isAbsolute(file) ? file : join(project, file)))]
+          : ['upgrade-drafts', '-p', project, ...epArgs];
+        if (input.confirm) args.push('--yes');
+        const emitter = makeProgressEmitter(ctx);
+        const r = await runHarness(args, { onProgress: emitter.onLine, signal: ctx.signal, timeoutMs: 45 * 60 * 1000 });
+        return fromHarness(r, input.confirm
+          ? `upgraded the approved drafts for episode ${input.episode} to 1080p`
+          : `quoted the 1080p upgrade for episode ${input.episode}'s drafts (nothing spent; confirm=true renders them)`);
       }
       case 'override_audio': {
         const args = ['override-audio', '-p', project, ...epArgs];

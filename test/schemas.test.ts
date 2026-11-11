@@ -296,3 +296,15 @@ test('AssembleInput coerces edit_timeline numeric inputs', () => {
   assert.equal(parsed.silenceDb, -28);
   assert.equal(parsed.silenceMin, 0.2);
 });
+
+test('MediaInput.upgrade_drafts quotes by default and only renders with confirm', () => {
+  const quote = MediaInput.parse({ action: 'upgrade_drafts', project: 'p', episode: 1 });
+  assert.equal(quote.action, 'upgrade_drafts');
+  if (quote.action === 'upgrade_drafts') {
+    assert.equal(quote.confirm, false);
+    assert.equal(quote.files, undefined);
+  }
+  const go = MediaInput.parse({ action: 'upgrade_drafts', project: 'p', episode: 1, files: ['scene-001/shot-004.mp4'], confirm: true });
+  if (go.action === 'upgrade_drafts') assert.equal(go.confirm, true);
+  assert.ok(MediaShape.action.options.includes('upgrade_drafts'));
+});

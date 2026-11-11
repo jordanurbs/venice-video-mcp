@@ -367,6 +367,19 @@ Long-running. Set a `progressToken` in `_meta` to receive shot-by-shot updates. 
 }
 ```
 
+Seedance 2.5 clips come back as **480p drafts** (Venice draft mode, the 480p price). Show them to the user before anything else is spent on them.
+
+### `media.upgrade_drafts`
+After the user has watched the drafts and approved them, render the same takes (seed, motion, audio) at 1080p, in place of the drafts. The first call quotes and spends nothing; call again with `confirm: true` once the user accepts the total. `files` limits it to chosen takes (a montage clip upgrades its master and re-cuts it). Drafts upgrade for 7 days.
+```json
+{
+  "action": "upgrade_drafts",
+  "project": "the-audacity",
+  "episode": 1,
+  "confirm": false
+}
+```
+
 ### `media.override_audio`
 Replace the model-native audio with Venice TTS dialogue and/or generated SFX. **This is now an exception path, not a default.** The recommended pipeline keeps the video model's native dialogue (Seedance / Wan 2.7 / HappyHorse all generate in-character audio when the panel prompt is detailed enough). Only call `override_audio { dialogue: true }` when the user explicitly wants Venice TTS — for example to swap accents, switch to a non-English voice, render a documentary NARRATOR voice-over, or repair a shot where the model botched a specific line. If you do call it, also flip `assemble.assemble { dialogueReplace: true }` and let `nativeVolume` default to **0** (harness ≥ 2.3.0) so the TTS owns the dialogue lane cleanly. Pass `nativeVolume: 0.2` only when you want to mix a soft ambient bed (room tone, paper rustle) under the TTS.
 

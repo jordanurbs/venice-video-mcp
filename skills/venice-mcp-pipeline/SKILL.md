@@ -96,7 +96,7 @@ If the idea is still vague at series/episode-creation time, run the Seedance OS 
 | `character` | `add`, `audition_voices`, `lock`, `generate_voice_reference` | sometimes (image gen / audio gen) |
 | `location` | `add`, `generate_references`, `list` | sometimes (image gen) |
 | `episode` | `new`, `workshop`, `approve`, `storyboard`, `qa`, `qa_approve`, `fix_panel`, `insert_shot` | sometimes (storyboard, qa) |
-| `media` | `generate_videos`, `override_audio`, `generate_music`, `generate_ambient`, `validate`, `loop` | **yes** (`loop` returns fast, then runs in the background) |
+| `media` | `generate_videos`, `upgrade_drafts`, `override_audio`, `generate_music`, `generate_ambient`, `validate`, `loop` | **yes** (`loop` returns fast, then runs in the background) |
 | `assemble` | `assemble`, `produce`, `mix_audio`, `edit_transcribe`, `edit_render`, `edit_timeline`, `export_timeline` | **yes** (except `export_timeline`, which is cheap XML write) |
 | `inspect` | `list`, `series`, `episode`, `shot`, `models`, `voices` | no |
 
@@ -231,6 +231,7 @@ The user says: "Make episode 3 about Y."
 7. For each flagged shot: `episode.fix_panel { project, episode, shot, characters?, prompt? }`. Re-run QA after. **Run this loop through the Seedance OS `retake-protocol`** (see venice-mcp-directing): triage the verdict, change **one variable** per fix, and keep an attempt budget instead of regenerating blindly.
 8. `episode.qa_approve { project, episode, notes? }`.
 9. `media.generate_videos { project, episode }` --- LONG. Stream progress. **Before this expensive step, run `seedance-copyright`** over the cast/props/references and rewrite any protected IP, real person, brand, logo, or song into a safe creative equivalent --- this is the hard-to-undo step.
+9a. Seedance 2.5 clips are 480p drafts. Show them to the user; once they approve, `media.upgrade_drafts { project, episode }` returns the 1080p quote, and `media.upgrade_drafts { project, episode, confirm: true }` renders the same takes at 1080p in place. Never pass `confirm: true` without the user's go.
 10. (Optional) `media.generate_music { project, episode, prompt?, duration? }` --- only needed if the script has no `musicCues[]`; per-act cues render automatically during assembly.
 11. `assemble.assemble { project, episode, ... }` --- final mp4 with subtitles + music + ambient bed, mixed to -16 LUFS.
 

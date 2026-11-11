@@ -38,7 +38,7 @@ flowchart LR
 | `character` | `add`, `audition_voices`, `lock`, `generate_voice_reference` | sometimes |
 | `location` | `add`, `generate_references`, `list` | sometimes |
 | `episode` | `new`, `workshop`, `approve`, `storyboard`, `qa`, `qa_approve`, `fix_panel`, `insert_shot` | sometimes |
-| `media` | `generate_videos`, `override_audio`, `generate_music`, `generate_ambient`, `validate`, `loop` | **yes** (`loop` returns fast + runs in background; the rest stream progress) |
+| `media` | `generate_videos`, `upgrade_drafts`, `override_audio`, `generate_music`, `generate_ambient`, `validate`, `loop` | **yes** (`loop` returns fast + runs in background; the rest stream progress) |
 | `assemble` | `assemble`, `produce`, `mix_audio`, `edit_transcribe`, `edit_render`, `edit_timeline`, `export_timeline` | **yes** (progress; `export_timeline` is a fast XML write) |
 | `inspect` | `list`, `series`, `episode`, `shot`, `models`, `voices` | no |
 

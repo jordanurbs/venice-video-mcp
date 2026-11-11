@@ -144,7 +144,7 @@ server.registerTool(
 server.registerTool(
   'media',
   {
-    description: `Generate or override media: videos / dialogue / sfx / music / ambient beds, validate, plus loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously and hot-swaps fresh takes; returns a URL + pid and keeps running in the background). Long-running; supports progress. ${SKILL_HINT}`,
+    description: `Generate or override media: videos / dialogue / sfx / music / ambient beds, validate, upgrade_drafts (Seedance 2.5 videos render as 480p drafts; after the user approves them, upgrade_drafts quotes and, with confirm=true, renders the same takes at 1080p), plus loop (start loop mode — a gate-skipping live browser loop that renders the shot script continuously and hot-swaps fresh takes; returns a URL + pid and keeps running in the background). Long-running; supports progress. ${SKILL_HINT}`,
     inputSchema: MediaShape,
   },
   async (args: any, extra: any) => {
